@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  logProductCreation,
+  logStockChange,
+  logPriceChange,
+  logProductUpdate,
+  logProductStatusChange,
+} from "@/lib/product-activity";
 
 /**
  * GET /api/products
@@ -145,12 +152,22 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return product;
+      return { product, stock: stock || 0 };
+    });
+
+    // Log product creation
+    await logProductCreation({
+      productId: result.product.id,
+      productName: result.product.name,
+      initialStock: result.stock,
+      initialPrice: result.product.price,
+      userId: session.user.id,
+      userName: session.user.name || undefined,
     });
 
     // Fetch the created product with relations
     const product = await prisma.product.findUnique({
-      where: { id: result.id },
+      where: { id: result.product.id },
       include: {
         stock: true,
         category: true,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Receipt, Eye, XCircle, AlertTriangle } from "lucide-react";
+import { Eye, XCircle } from "lucide-react";
 import { usePermission } from "@/hooks/use-permission";
 import {
   DataTable,
@@ -28,6 +28,8 @@ interface TransactionItem {
   price: number;
   quantity: number;
   subtotal: number;
+  discountPrice?: number;
+  discountAmount?: number;
 }
 
 interface Transaction {
@@ -49,6 +51,9 @@ interface Transaction {
     canceledAt: string;
     canceledBy: string;
   }[];
+  discountAmount?: number;
+  discountType?: string | null;
+  discountValue?: number | null;
 }
 
 export default function TransactionsPage() {

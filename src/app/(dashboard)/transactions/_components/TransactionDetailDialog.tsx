@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Receipt, Download, Printer } from "lucide-react";
+import { Receipt, Printer, Percent } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { Transaction } from "../page";
 
@@ -32,6 +32,18 @@ export function TransactionDetailDialog({
   };
 
   if (!transaction) return null;
+
+  // Calculate totals
+  const subtotal = transaction.items.reduce((sum, item) => {
+    return sum + (item.discountPrice || item.price) * item.quantity;
+  }, 0);
+
+  const totalItemDiscounts = transaction.items.reduce((sum, item) => {
+    return sum + (item.discountAmount || 0);
+  }, 0);
+
+  const transactionDiscountAmount = transaction.discountAmount || 0;
+  const totalDiscount = totalItemDiscounts + transactionDiscountAmount;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -63,20 +75,30 @@ export function TransactionDetailDialog({
           <div className="space-y-2">
             <h4 className="font-medium text-sm">Item Pembelian</h4>
             <div className="space-y-2">
-              {transaction.items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex justify-between text-sm print:text-xs"
-                >
-                  <div className="flex-1">
-                    <p className="font-medium">{item.productName}</p>
-                    <p className="text-muted-foreground text-xs">
-                      {item.quantity} x {formatCurrency(item.price)}
-                    </p>
+              {transaction.items.map((item) => {
+                const discountedPrice = item.discountPrice || item.price;
+                const hasDiscount = item.discountAmount && item.discountAmount > 0;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="flex justify-between text-sm print:text-xs"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium">{item.productName}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {item.quantity} x {formatCurrency(item.price)}
+                        {hasDiscount && (
+                          <span className="text-destructive ml-1">
+                            (-{formatCurrency(item.discountAmount!)})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <p className="font-medium">{formatCurrency(item.subtotal)}</p>
                   </div>
-                  <p className="font-medium">{formatCurrency(item.subtotal)}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -84,10 +106,52 @@ export function TransactionDetailDialog({
 
           {/* Total */}
           <div className="space-y-2">
-            <div className="flex justify-between">
+            <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
-              <span>{formatCurrency(transaction.totalAmount)}</span>
+              <span>{formatCurrency(subtotal)}</span>
             </div>
+
+            {/* Item Discounts */}
+            {totalItemDiscounts > 0 && (
+              <div className="flex justify-between text-sm text-destructive">
+                <span className="flex items-center gap-1">
+                  <Percent className="w-3 h-3" />
+                  Diskon Item
+                </span>
+                <span>-{formatCurrency(totalItemDiscounts)}</span>
+              </div>
+            )}
+
+            {/* Transaction Discount */}
+            {transactionDiscountAmount > 0 && (
+              <div className="flex justify-between text-sm text-destructive">
+                <span className="flex items-center gap-1">
+                  <Percent className="w-3 h-3" />
+                  Diskon Transaksi (
+                  {transaction.discountType === "PERCENTAGE"
+                    ? `${transaction.discountValue}%`
+                    : transaction.discountType === "NOMINAL"
+                    ? formatCurrency(transaction.discountValue!)
+                    : ""}
+                  )
+                </span>
+                <span>-{formatCurrency(transactionDiscountAmount)}</span>
+              </div>
+            )}
+
+            {totalDiscount > 0 && (
+              <>
+                <Separator />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total Diskon</span>
+                  <span className="text-destructive">
+                    -{formatCurrency(totalDiscount)}
+                  </span>
+                </div>
+              </>
+            )}
+
+            <Separator />
             <div className="flex justify-between text-lg font-bold">
               <span>Total</span>
               <span className="text-primary">

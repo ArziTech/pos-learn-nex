@@ -95,9 +95,10 @@ model Product {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  category         Category?         @relation(fields: [categoryId], references: [id])
+  category         Category?             @relation(fields: [categoryId], references: [id])
   stock            Stock?
   transactionItems TransactionItem[]
+  activityLogs     ProductActivityLog[]
 
   @@index([name])
 }
@@ -136,6 +137,11 @@ model Transaction {
   snapRedirectUrl  String?   @db.Text
   paymentMethod    String?   // e.g., "qris", "gopay", "bank_transfer", "credit_card"
   paidAt           DateTime?
+
+  // Discount fields
+  discountAmount    Int       @default(0)  // Total discount in rupiah
+  discountType      String?   // PERCENTAGE, NOMINAL
+  discountValue     Float?    // Discount value (10 for %, 10000 for nominal)
 
   cashier           User              @relation(fields: [cashierId], references: [id])
   canceledByUser    User?             @relation("CanceledBy", fields: [canceledBy], references: [id])
@@ -193,6 +199,10 @@ model TransactionItem {
   quantity      Int
   subtotal      Int
 
+  // Discount fields
+  discountPrice     Int       @default(0)  // Discounted price per item
+  discountAmount    Int       @default(0)  // Total discount for this line
+
   transaction Transaction @relation(fields: [transactionId], references: [id])
   product     Product     @relation(fields: [productId], references: [id])
 
@@ -211,4 +221,34 @@ model TransactionCancelLog {
 
   @@index([transactionId])
   @@index([canceledAt])
+}
+
+enum ProductActivityType {
+  CREATED
+  UPDATED
+  STOCK_ADDED
+  STOCK_REMOVED
+  PRICE_CHANGED
+  DEACTIVATED
+  ACTIVATED
+  DELETED
+}
+
+model ProductActivityLog {
+  id          Int                 @id @default(autoincrement())
+  productId   Int
+  activityType ProductActivityType
+  description String
+  changes      Json?               @db.Json
+  previousValue Int?              // Previous value before change
+  newValue     Int?               // New value after change
+  userId       String
+  userName     String?
+  createdAt    DateTime            @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([createdAt])
+  @@index([activityType])
 }

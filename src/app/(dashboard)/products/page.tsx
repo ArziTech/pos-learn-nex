@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Pencil, Trash2, Plus, Package } from "lucide-react";
+import { Pencil, Trash2, Plus, Package, History } from "lucide-react";
 import { usePermission } from "@/hooks/use-permission";
 import {
   DataTable,
@@ -17,6 +17,7 @@ import { formatCurrency } from "@/lib/utils";
 import { CreateProductDialog } from "./_components/CreateProductDialog";
 import { EditProductDialog } from "./_components/EditProductDialog";
 import { DeleteProductDialog } from "./_components/DeleteProductDialog";
+import { ProductActivityDialog } from "./_components/ProductActivityDialog";
 
 interface Product {
   id: number;
@@ -42,6 +43,7 @@ export default function ProductsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isActivityDialogOpen, setIsActivityDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   // Fetch products action for DataTable
@@ -83,6 +85,11 @@ export default function ProductsPage() {
   const openDeleteDialog = (product: Product) => {
     setSelectedProduct(product);
     setIsDeleteDialogOpen(true);
+  };
+
+  const openActivityDialog = (product: Product) => {
+    setSelectedProduct(product);
+    setIsActivityDialogOpen(true);
   };
 
   // Permission check
@@ -132,6 +139,7 @@ export default function ProductsPage() {
               { key: "stock", label: "Stok", sortable: false },
               { key: "status", label: "Status", sortable: false },
               { key: "actions", label: "Aksi", sortable: false },
+              { key: "history", label: "", sortable: false },
             ]}
             rows={(products) =>
               products.map((product) => (
@@ -174,6 +182,14 @@ export default function ProductsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => openActivityDialog(product)}
+                        title="Lihat Riwayat"
+                      >
+                        <History className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => openEditModal(product)}
                       >
                         <Pencil className="h-4 w-4" />
@@ -213,6 +229,13 @@ export default function ProductsPage() {
         onOpenChange={setIsDeleteDialogOpen}
         product={selectedProduct}
         onSuccess={invalidateTable}
+      />
+
+      <ProductActivityDialog
+        open={isActivityDialogOpen}
+        onOpenChange={setIsActivityDialogOpen}
+        productId={selectedProduct?.id || 0}
+        productName={selectedProduct?.name || ""}
       />
     </div>
   );

@@ -3,13 +3,11 @@
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, ShoppingCart } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import axiosInstance from "@/lib/axios";
-import { formatCurrency } from "@/lib/utils";
 import { CashierProductList } from "./CashierProductList";
 import { CashierCart } from "./CashierCart";
 import { PaymentDialog } from "./PaymentDialog";
@@ -22,6 +20,15 @@ export interface CartItem {
   quantity: number;
   stock: number;
   subtotal: number;
+  discountType?: 'PERCENTAGE' | 'NOMINAL' | null;
+  discountValue?: number;
+  discountedPrice?: number;
+  discountAmount?: number;
+}
+
+export interface TransactionDiscount {
+  type: 'PERCENTAGE' | 'NOMINAL' | null;
+  value: number;
 }
 
 export interface Product {
@@ -45,6 +52,10 @@ export function CashierPageClient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [transactionDiscount, setTransactionDiscount] = useState<TransactionDiscount>({
+    type: null,
+    value: 0,
+  });
 
   const queryClient = useQueryClient();
 
@@ -150,6 +161,10 @@ export function CashierPageClient() {
             quantity: 1,
             stock: dbStock,
             subtotal: product.price,
+            discountType: null,
+            discountValue: 0,
+            discountedPrice: product.price,
+            discountAmount: 0,
           },
         ];
       });
@@ -188,6 +203,76 @@ export function CashierPageClient() {
     setCart([]);
   }, []);
 
+  // Apply item discount
+  const applyItemDiscount = useCallback(
+    (itemId: number, discountType: 'PERCENTAGE' | 'NOMINAL' | null, discountValue: number) => {
+      setCart((prevCart) =>
+        prevCart.map((item) => {
+          if (item.id === itemId) {
+            let discountAmount = 0;
+            let discountedPrice = item.price;
+
+            if (discountType && discountValue > 0) {
+              if (discountType === 'PERCENTAGE') {
+                discountAmount = Math.round((item.price * discountValue) / 100);
+              } else {
+                discountAmount = Math.min(discountValue, item.price);
+              }
+              discountedPrice = item.price - discountAmount;
+            }
+
+            return {
+              ...item,
+              discountType,
+              discountValue,
+              discountedPrice,
+              discountAmount,
+              subtotal: discountedPrice * item.quantity,
+            };
+          }
+          return item;
+        })
+      );
+    },
+    []
+  );
+
+  // Apply transaction discount
+  const applyTransactionDiscount = useCallback(
+    (type: 'PERCENTAGE' | 'NOMINAL' | null, value: number) => {
+      setTransactionDiscount({ type, value });
+    },
+    []
+  );
+
+  // Calculate totals with discounts
+  const cartCalculations = useMemo(() => {
+    const subtotal = cart.reduce((sum, item) => {
+      return sum + (item.discountedPrice || item.price) * item.quantity;
+    }, 0);
+
+    let transactionDiscountAmount = 0;
+    if (transactionDiscount.type && transactionDiscount.value > 0) {
+      if (transactionDiscount.type === 'PERCENTAGE') {
+        transactionDiscountAmount = Math.round((subtotal * transactionDiscount.value) / 100);
+      } else {
+        transactionDiscountAmount = Math.min(transactionDiscount.value, subtotal);
+      }
+    }
+
+    const totalItemDiscounts = cart.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+    const totalDiscount = totalItemDiscounts + transactionDiscountAmount;
+    const finalTotal = subtotal - transactionDiscountAmount;
+
+    return {
+      subtotal,
+      transactionDiscountAmount,
+      totalItemDiscounts,
+      totalDiscount,
+      finalTotal,
+    };
+  }, [cart, transactionDiscount]);
+
   const handleCheckout = () => {
     if (cart.length === 0) {
       toast.error("Keranjang kosong!", {
@@ -205,7 +290,7 @@ export function CashierPageClient() {
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
   };
 
-  const totalAmount = cart.reduce((sum, item) => sum + item.subtotal, 0);
+  const totalAmount = cartCalculations.finalTotal;
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -260,11 +345,17 @@ export function CashierPageClient() {
             cart={cart}
             totalAmount={totalAmount}
             totalItems={totalItems}
+            subtotal={cartCalculations.subtotal}
+            transactionDiscount={transactionDiscount}
+            transactionDiscountAmount={cartCalculations.transactionDiscountAmount}
+            totalItemDiscounts={cartCalculations.totalItemDiscounts}
             onUpdateQuantity={updateQuantity}
             onRemove={removeFromCart}
             onClear={clearCart}
             onCheckout={handleCheckout}
             isCheckingOut={createTransactionMutation.isPending}
+            onApplyItemDiscount={applyItemDiscount}
+            onApplyTransactionDiscount={applyTransactionDiscount}
           />
         </div>
       </div>
@@ -275,6 +366,12 @@ export function CashierPageClient() {
         onOpenChange={setIsPaymentDialogOpen}
         cart={cart}
         totalAmount={totalAmount}
+        subtotal={cartCalculations.subtotal}
+        transactionDiscount={{
+          type: transactionDiscount.type,
+          value: transactionDiscount.value,
+          amount: cartCalculations.transactionDiscountAmount,
+        }}
         onSuccess={handlePaymentSuccess}
       />
     </div>

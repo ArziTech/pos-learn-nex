@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { items, totalAmount, paymentMethod = "MIDTRANS_QRIS", customerDetails } = body;
+    const { items, totalAmount, paymentMethod = "MIDTRANS_QRIS", customerDetails, discount } = body;
 
     // Validate items
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -27,9 +27,9 @@ export async function POST(request: NextRequest) {
 
     // Validate each item
     for (const item of items) {
-      if (!item.productId || !item.quantity || !item.price) {
+      if (!item.productId || !item.quantity) {
         return NextResponse.json(
-          { error: "Invalid item", details: "Each item must have productId, quantity, and price" },
+          { error: "Invalid item", details: "Each item must have productId and quantity" },
           { status: 400 }
         );
       }
@@ -83,20 +83,31 @@ export async function POST(request: NextRequest) {
           paymentType: paymentMethod,
           paymentStatus: "PENDING",
           cashierId: session.user.id,
+          // Discount fields
+          discountAmount: discount?.amount || 0,
+          discountType: discount?.type || null,
+          discountValue: discount?.value || null,
         },
       });
 
       // Create transaction items and update stock
       for (const item of items) {
+        const product = products.find((p) => p.id === item.productId);
+        const discountedPrice = item.discountedPrice || item.price || product?.price || 0;
+        const discountAmount = item.discountAmount || 0;
+
         // Create transaction item
         await tx.transactionItem.create({
           data: {
             transactionId: transaction.id,
             productId: item.productId,
-            productName: products.find((p) => p.id === item.productId)?.name || "",
-            price: item.price,
+            productName: product?.name || "",
+            price: item.price || product?.price || 0,
             quantity: item.quantity,
-            subtotal: item.price * item.quantity,
+            subtotal: discountedPrice * item.quantity,
+            // Discount fields
+            discountPrice: discountedPrice,
+            discountAmount: discountAmount,
           },
         });
 
