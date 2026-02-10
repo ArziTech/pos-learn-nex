@@ -1,0 +1,214 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Auth.js (NextAuth v5) with JWT strategy - no database sessions
+model User {
+  id            String        @id @default(cuid())
+  username      String        @unique
+  name          String?
+  email         String?       @unique
+  emailVerified DateTime?
+  image         String?
+  password      String // Hashed password for credentials provider
+  roleId        Int
+  status        Boolean       @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  role          Role          @relation(fields: [roleId], references: [id])
+  transactions  Transaction[]
+  canceledTransactions Transaction[] @relation("CanceledBy")
+
+  @@index([username])
+  @@index([status, deletedAt])
+}
+
+model Role {
+  id                Int              @id @default(autoincrement())
+  name              String           @unique
+  description       String?
+  byPassAllFeatures Boolean          @default(false)
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  User              User[]
+  RolePermission    RolePermission[]
+}
+
+model Permission {
+  id             Int              @id @default(autoincrement())
+  code           String           @unique
+  label          String           @unique
+  href           String?
+  description    String?
+  icon           String?
+  module         String?
+  isSection      Boolean          @default(false)
+  sequence       Float            @default(0)
+  parentId       Int?
+  showOnSidebar  Boolean          @default(false)
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  parent         Permission?      @relation("children", fields: [parentId], references: [id])
+  children       Permission[]     @relation("children")
+  RolePermission RolePermission[]
+
+  @@index([parentId])
+  @@index([sequence])
+  @@index([module])
+}
+
+model RolePermission {
+  id           Int        @id @default(autoincrement())
+  roleId       Int
+  permissionId Int
+  createdAt    DateTime   @default(now())
+  createdBy    String?
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model Product {
+  id         Int      @id @default(autoincrement())
+  name       String
+  sku        String   @unique
+  price      Int
+  categoryId Int?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category         Category?         @relation(fields: [categoryId], references: [id])
+  stock            Stock?
+  transactionItems TransactionItem[]
+
+  @@index([name])
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  title     String
+  products  Product[]
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+}
+
+model Stock {
+  id        Int      @id @default(autoincrement())
+  number    Int
+  quantity  Int
+  updatedAt DateTime @updatedAt
+  productId Int      @unique
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model Transaction {
+  id          Int                   @id @default(autoincrement())
+  invoiceNo   String                @unique
+  totalAmount Int
+  status      TransactionStatus
+  cashierId   String
+  createdAt   DateTime              @default(now())
+  canceledAt  DateTime?
+  canceledBy  String?
+
+  // Payment fields
+  paymentType      String?   // CASH, MIDTRANS_QRIS, MIDTRANS_EWALLET, MIDTRANS_BANK_TRANSFER, etc.
+  paymentStatus    PaymentStatus @default(PENDING)
+  snapToken        String?   @db.Text
+  snapRedirectUrl  String?   @db.Text
+  paymentMethod    String?   // e.g., "qris", "gopay", "bank_transfer", "credit_card"
+  paidAt           DateTime?
+
+  cashier           User              @relation(fields: [cashierId], references: [id])
+  canceledByUser    User?             @relation("CanceledBy", fields: [canceledBy], references: [id])
+  items             TransactionItem[]
+  cancelLogs       TransactionCancelLog[]
+  payment           Payment?
+
+  @@index([createdAt])
+  @@index([cashierId])
+  @@index([status])
+  @@index([paymentStatus])
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  CANCELED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+}
+
+model Payment {
+  id              Int       @id @default(autoincrement())
+  transactionId   Int       @unique
+  amount          Int
+  paymentType     String    // MIDTRANS
+  paymentMethod   String?   // qris, gopay, shopeepay, bank_transfer, etc.
+  paymentStatus   String    // pending, settlement, pending, deny, expire, cancel
+  fraudStatus     String?   // accept, challenge, reject
+  transactionTime DateTime?
+  midtransTransactionId String?   @db.Text // Midtrans transaction ID
+  statusCode      String?
+  statusMessage   String?   @db.Text
+  rawResponse     Json?     @db.Json
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  transaction     Transaction @relation(fields: [transactionId], references: [id])
+
+  @@index([transactionId])
+  @@index([paymentStatus])
+}
+
+model TransactionItem {
+  id            Int    @id @default(autoincrement())
+  transactionId Int
+  productId     Int
+  productName   String
+  price         Int
+  quantity      Int
+  subtotal      Int
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+  product     Product     @relation(fields: [productId], references: [id])
+
+  @@index([transactionId])
+  @@index([productId])
+}
+
+model TransactionCancelLog {
+  id             Int       @id @default(autoincrement())
+  transactionId  Int
+  reason         String
+  canceledBy     String
+  canceledAt     DateTime  @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+
+  @@index([transactionId])
+  @@index([canceledAt])
+}
